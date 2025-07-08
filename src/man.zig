@@ -1,9 +1,10 @@
 const std = @import("std");
+const utils = @import("./utils.zig");
 
 pub fn man(allocator: std.mem.Allocator, args: []const []const u8) !void {
-    const man_path = args[2];
-    const mtime = try getTimeStamp(man_path);
-    const cache_path = try getCachePath(allocator, man_path, mtime);
+    const man_tar = args[2];
+    const mtime = try getTimeStamp(man_tar);
+    const cache_path = try getCachePath(allocator, man_tar, mtime);
     // check and read the cache
     if (std.fs.cwd().openFile(cache_path, .{}) catch null) |file| {
         defer file.close();
@@ -18,8 +19,10 @@ pub fn man(allocator: std.mem.Allocator, args: []const []const u8) !void {
         return;
     }
 
+    const man_exe = try utils.findExeInPath(allocator, args[0]);
+
     // run and write the cache
-    var child = std.process.Child.init(&[_][]const u8{ "man", "-l", man_path }, allocator);
+    var child = std.process.Child.init(&[_][]const u8{ man_exe, "-l", man_tar }, allocator);
     var envmap = try std.process.getEnvMap(allocator);
     defer envmap.deinit();
     try envmap.put("MANPAGER", "");
