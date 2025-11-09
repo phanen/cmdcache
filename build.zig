@@ -5,9 +5,11 @@ pub fn build(b: *std.Build) void {
     const opt = b.standardOptimizeOption(.{});
     const exe = b.addExecutable(.{
         .name = "cmdcache",
-        .root_source_file = b.path("src/main.zig"),
-        .target = t,
-        .optimize = opt,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = t,
+            .optimize = opt,
+        }),
     });
     b.installArtifact(exe);
 

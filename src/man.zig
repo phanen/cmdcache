@@ -5,17 +5,16 @@ pub fn man(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const man_tar = args[2];
     const mtime = try getTimeStamp(man_tar);
     const cache_path = try getCachePath(allocator, man_tar, mtime);
+
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writerStreaming(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
     // check and read the cache
     if (std.fs.cwd().openFile(cache_path, .{}) catch null) |file| {
         defer file.close();
-        var reader = file.reader();
-        var writer = std.io.getStdOut().writer();
-        var buf: [4096]u8 = undefined;
-        while (true) {
-            const n = try reader.read(&buf);
-            if (n == 0) break;
-            try writer.writeAll(buf[0..n]);
-        }
+        var file_reader = file.reader(&.{});
+        _ = try stdout.sendFileAll(&file_reader, .unlimited);
+        try stdout.flush();
         return;
     }
 
@@ -29,18 +28,16 @@ pub fn man(allocator: std.mem.Allocator, args: []const []const u8) !void {
     child.env_map = &envmap;
     child.stdout_behavior = .Pipe;
     try child.spawn();
+    var child_stdout = child.stdout.?.reader(&.{});
 
     var cache = try std.fs.cwd().createFile(cache_path, .{});
     defer cache.close();
-
-    var stdout = child.stdout.?.reader();
-    var out_writer = std.io.getStdOut().writer();
     var tee_buf: [4096]u8 = undefined;
     while (true) {
-        const n = try stdout.read(&tee_buf);
+        const n = try child_stdout.interface.readSliceShort(&tee_buf);
         if (n == 0) break;
-        try out_writer.writeAll(tee_buf[0..n]);
-        try cache.writer().writeAll(tee_buf[0..n]);
+        try stdout.writeAll(tee_buf[0..n]);
+        try cache.writeAll(tee_buf[0..n]);
     }
     _ = try child.wait();
     return;
