@@ -15,6 +15,7 @@ fn fallback(allocator: std.mem.Allocator, args: []const []const u8) !void {
 const ArgRouter = struct {
     pattern: []const []const u8,
     handler: *const fn (std.mem.Allocator, []const []const u8) anyerror!void,
+    env: ?[]const u8 = null, // Optional environment variable name
 };
 
 fn match(args: []const []const u8, pattern: []const []const u8) bool {
@@ -31,9 +32,12 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
     const routes = [_]ArgRouter{
-        .{ .pattern = &.{ "man", "-l" }, .handler = man },
+        .{ .pattern = &.{ "man", "-l" }, .handler = man, .env = "VIMRUNTIME" },
     };
     for (routes) |route| {
+        if (route.env) |env_name| {
+            if (std.posix.getenv(env_name) == null) continue; // Skip if env not present
+        }
         if (match(args, route.pattern)) {
             return try route.handler(allocator, args);
         }
