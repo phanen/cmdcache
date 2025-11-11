@@ -1,0 +1,99 @@
+diff --git a/runtime/lua/man.lua b/runtime/lua/man.lua
+index 5c13426fc0..940f560e6c 100644
+--- a/runtime/lua/man.lua
++++ b/runtime/lua/man.lua
+@@ -12,7 +12,9 @@ local function system(cmd, silent, env)
+     error(string.format('executable not found: "%s"', cmd[1]), 0)
+   end
+ 
+-  local r = vim.system(cmd, { env = env, timeout = 10000 }):wait()
++  local opts = { env = env, timeout = 10000 }
++  local r = coroutine.running() and require('vim._async').await(3, vim.system, cmd, opts)
++    or vim.system(cmd, opts):wait()
+ 
+   if not silent then
+     if r.code ~= 0 then
+@@ -190,8 +192,8 @@ local HlGroups = {
+ }
+ 
+ local function highlight_man_page()
+-  local mod = vim.bo.modifiable
+-  vim.bo.modifiable = true
++  local mod, ro = vim.bo.modifiable, vim.bo.readonly
++  vim.bo.modifiable, vim.bo.readonly = true, false
+ 
+   local lines = api.nvim_buf_get_lines(0, 0, -1, false)
+ 
+@@ -199,11 +201,14 @@ local function highlight_man_page()
+   local hls = {}
+ 
+   for i, line in ipairs(lines) do
+-    lines[i] = render_line(line, i - 1, hls)
++    api.nvim_buf_set_lines(0, i - 1, i, false, { render_line(line, i - 1, hls) })
++    if i % 1000 == 0 and coroutine.running() then
++      vim.bo.modifiable, vim.bo.readonly = mod, ro
++      require('vim._async').await(1, vim.schedule)
++      vim.bo.modifiable, vim.bo.readonly = true, false
++    end
+   end
+ 
+-  api.nvim_buf_set_lines(0, 0, -1, false, lines)
+-
+   for _, hl in ipairs(hls) do
+     if hl.attr ~= Attrs.None then
+       --- @diagnostic disable-next-line: deprecated
+@@ -211,7 +216,7 @@ local function highlight_man_page()
+     end
+   end
+ 
+-  vim.bo.modifiable = mod
++  vim.bo.modifiable, vim.bo.readonly = mod, ro
+ end
+ 
+ --- @param name? string
+@@ -633,12 +638,13 @@ function M.goto_tag(pattern, _, _)
+ end
+ 
+ --- Called when Nvim is invoked as $MANPAGER.
+-function M.init_pager()
++function M._init_pager()
+   if fn.getline(1):match('^%s*$') then
+     api.nvim_buf_set_lines(0, 0, 1, false, {})
+   else
+     vim.cmd('keepjumps 1')
+   end
++  set_options()
+   highlight_man_page()
+   -- Guess the ref from the heading (which is usually uppercase, so we cannot
+   -- know the correct casing, cf. `man glDrawArraysInstanced`).
+@@ -663,8 +669,6 @@ function M.init_pager()
+   elseif not fn.bufname('%'):match('man://') then -- Avoid duplicate buffers, E95.
+     vim.cmd.file({ man_bufname, mods = { silent = true } })
+   end
+-
+-  set_options()
+ end
+ 
+ --- Combine the name and sect into a manpage reference so that all
+@@ -790,8 +794,10 @@ function M.read_page(ref)
+     endtry
+   ]])
+   vim.cmd('1') -- Move cursor to first line
+-  highlight_man_page()
+-  set_options()
++  require('vim._async').run(function()
++    highlight_man_page()
++    set_options()
++  end)
+ end
+ 
+ function M.show_toc()
+@@ -828,4 +834,8 @@ function M.show_toc()
+   vim.bo.filetype = 'qf'
+ end
+ 
++M.init_pager = function()
++  require('vim._async').run(M._init_pager)
++end
++
+ return M

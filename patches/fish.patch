@@ -1,0 +1,49 @@
+diff --git a/share/functions/__fish_man_page.fish b/share/functions/__fish_man_page.fish
+index 6a83270db..0e09f9a15 100644
+--- a/share/functions/__fish_man_page.fish
++++ b/share/functions/__fish_man_page.fish
+@@ -23,16 +23,13 @@ function __fish_man_page
+     # But since we don't know what pager it is, and because `man` is totally underspecified,
+     # the best we can do is to *try* the man page, and assume that `man` will return false if it fails.
+     # See #7863.
++    set -lx __in_fish_man_page
+     if set -q args[2]
+         and not string match -q -- '*/*' $args[2]
+-        and man "$maincmd-$args[2]" &>/dev/null
+-        man "$maincmd-$args[2]"
++        and man "$maincmd-$args[2]" 2>/dev/null
+     else
+-        if man "$maincmd" &>/dev/null
+-            man "$maincmd"
+-        else
+-            printf \a
+-        end
++        man "$maincmd" 2>/dev/null
++        or printf \a
+     end
+ 
+     commandline -f repaint
+diff --git a/share/functions/man.fish b/share/functions/man.fish
+index fdcaa3918..f31a792c1 100644
+--- a/share/functions/man.fish
++++ b/share/functions/man.fish
+@@ -51,5 +51,18 @@ function man
+     set -q manpath[1]
+     and set -lx MANPATH $manpath
+ 
+-    command man $argv
++    if not set -q __in_fish_man_page
++        command man $argv
++        return
++    end
++
++    if not command man -w $argv &>/dev/null
++        return 1
++    end
++
++    if set -q NVIM # flatten.nvim
++        command nvim --headless +"tab Man $argv"
++    else
++        command nvim +"tab Man $argv | tabonly"
++    end
+ end
