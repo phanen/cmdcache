@@ -39,6 +39,7 @@ pub fn man(allocator: std.mem.Allocator, args: []const []const u8) !void {
         try stdout.writeAll(tee_buf[0..n]);
         try cache.writeAll(tee_buf[0..n]);
     }
+    try stdout.flush();
     _ = try child.wait();
     return;
 }
