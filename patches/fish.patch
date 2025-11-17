@@ -24,10 +24,10 @@ index 6a83270db..0e09f9a15 100644
  
      commandline -f repaint
 diff --git a/share/functions/man.fish b/share/functions/man.fish
-index fdcaa3918..f31a792c1 100644
+index fdcaa3918..69c2f4cf8 100644
 --- a/share/functions/man.fish
 +++ b/share/functions/man.fish
-@@ -51,5 +51,18 @@ function man
+@@ -51,5 +51,21 @@ function man
      set -q manpath[1]
      and set -lx MANPATH $manpath
  
@@ -36,6 +36,9 @@ index fdcaa3918..f31a792c1 100644
 +        command man $argv
 +        return
 +    end
++
++    # erase the flag it to make thing work correctly in nvim
++    set -e __in_fish_man_page
 +
 +    if not command man -w $argv &>/dev/null
 +        return 1
