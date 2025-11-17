@@ -12,35 +12,36 @@ fn fallback(allocator: std.mem.Allocator, args: []const []const u8) !void {
     std.process.fatal("the following command failed to execve with '{s}':\n{s}", .{ @errorName(err), cmd });
 }
 
-const ArgRouter = struct {
+const Matcher = struct {
     pattern: []const []const u8,
     handler: *const fn (std.mem.Allocator, []const []const u8) anyerror!void,
-    env: ?[]const u8 = null, // Optional environment variable name
-};
+    env: ?[]const u8, // Optional environment variable name
 
-fn match(args: []const []const u8, pattern: []const []const u8) bool {
-    if (args.len < pattern.len) return false;
-    for (pattern, 0..) |pat, i| {
-        const a = if (i == 0) std.fs.path.basename(args[i]) else args[i];
-        if (!std.mem.eql(u8, a, pat)) return false;
+    pub fn match(self: *const Matcher, args: []const []const u8) bool {
+        if (self.env) |env_name| {
+            if (std.posix.getenv(env_name) == null) return false; // Skip if env not present
+        }
+        if (args.len < self.pattern.len) return false;
+        for (self.pattern, 0..) |pat, i| {
+            const a = if (i == 0) std.fs.path.basename(args[i]) else args[i];
+            if (!std.mem.eql(u8, a, pat)) return false;
+        }
+        return true;
     }
-    return true;
-}
+};
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-    const routes = [_]ArgRouter{
+    const matchers = [_]Matcher{
         .{ .pattern = &.{ "man", "-l" }, .handler = man, .env = "VIMRUNTIME" },
     };
-    for (routes) |route| {
-        if (route.env) |env_name| {
-            if (std.posix.getenv(env_name) == null) continue; // Skip if env not present
-        }
-        if (match(args, route.pattern)) {
-            return try route.handler(allocator, args);
+    for (matchers) |matcher| {
+        if (matcher.match(args)) {
+            return try matcher.handler(allocator, args);
         }
     }
     try fallback(allocator, args);
 }
+
